@@ -2,14 +2,9 @@ from threading import Thread
 from logger import setup_logger, setup_library_loggers
 import os
 import re
-import logging
-import datetime
-import json
-import requests
 import praw
-import pymongo
-from rich.pretty import pprint
 from discord import send_discord_webhook
+from mongo import is_submission_persisted, save_submission, is_comment_persisted, save_comment
 
 # set log level from environment
 log_level = os.getenv("LOG_LEVEL", "INFO")
@@ -26,9 +21,6 @@ REDDIT_CLIENT_ID = os.getenv('REDDIT_CLIENT_ID')
 REDDIT_CLIENT_SECRET = os.getenv('REDDIT_CLIENT_SECRET')
 REDDIT_USER_AGENT = os.getenv('REDDIT_USER_AGENT')
 
-MONGO_URI = os.getenv('MONGO_URI')
-
-DISCORD_WEBHOOK_URL = os.getenv('DISCORD_WEBHOOK_URL')
 # endregion
 
 
@@ -44,14 +36,6 @@ praw_config = {
 praw_subreddit = 'patfinnerty'
 # endregion
 
-# region MongoDB Configuration
-client = pymongo.MongoClient(MONGO_URI, server_api=pymongo.server_api.ServerApi(
-    version='1', strict=True, deprecation_errors=True))
-database = client['main']
-submissions_collection = database['submissions']
-comments_collection = database['comments']
-# endregion
-
 chord_progression_pattern = re.compile(
     r'(\s|^)(I IV V|I V vi IV|ii V I|vi IV I V|I vi IV V|iii vi IV V|I IV vi V|I vi ii V|IV V I|I iii IV V|1 4 5|1 5 6 4|2 5 1|6 4 1 5|1 6 4 5|3 6 4 5|1 4 6 5|1 6 2 5|4 5 1|1 3 4 5)(\?+|!+|\.+|\,+)?(\s|$)')
 chord_names_pattern = re.compile(
@@ -60,103 +44,6 @@ chord_names_pattern = re.compile(
 
 def is_pattern_matched(text):
     return chord_names_pattern.search(text) or chord_progression_pattern.search(text)
-
-
-def convert_to_datetime(utc_time):
-    return datetime.datetime.fromtimestamp(utc_time).strftime('%Y-%m-%d %H:%M:%S')
-
-
-def is_submission_persisted(submission_id):
-    document = submissions_collection.find_one({'_id': submission_id})
-
-    if document:
-        app_logger.info(
-            f"found submission collection document {document['_id']}")
-        app_logger.info(pprint(document))
-        return True
-    else:
-        app_logger.info(f'no submission collection document found')
-        return False
-
-
-def save_submission_to_db(submission):
-    data = {
-        '_id': submission.id,
-        'title': submission.title,
-        'author': {
-            'id': submission.author.id,
-            'name': submission.author.name,
-            'url': f'https://www.reddit.com/u/{submission.author.name}'
-        },
-        'url': submission.url,
-        'created': convert_to_datetime(submission.created_utc)
-    }
-
-    try:
-        document = submissions_collection.insert_one(data)
-        inserted_id = document.inserted_id
-        inserted_document = submissions_collection.find_one(
-            {'_id': inserted_id})
-
-        send_discord_webhook('submission', inserted_document)
-
-        app_logger.info(f'Submission {submission.id} saved to database')
-        app_logger.info(f'{pprint(inserted_document)}')
-
-    except Exception as e:
-        app_logger.error(f'Error saving submission: {e}')
-
-
-def is_comment_persisted(comment_id):
-    document = comments_collection.find_one({'_id': comment_id})
-
-    if document:
-        app_logger.info(
-            f"found comment collection document: {document['_id']}")
-        app_logger.info(pprint(document))
-        return True
-    else:
-        app_logger.info(f'no comment collection document found')
-        return False
-
-
-def save_comment_to_db(comment):
-    data = {
-        '_id': comment.id,
-        'body': comment.body,
-        'author': {
-            'id': comment.author.id,
-            'name': comment.author.name,
-            'url': f'https://www.reddit.com/u/{comment.author.name}'
-        },
-        'submission': {
-            'id': comment.submission.id,
-            'title': comment.submission.title,
-            'author': {
-                'id': comment.submission.author.id,
-                'name': comment.submission.author.name,
-                'url': f'https://www.reddit.com/u/{comment.submission.author.name}'
-            },
-            'url': comment.submission.url,
-            'created': convert_to_datetime(comment.submission.created_utc)
-        },
-        'permalink': f'https://www.reddit.com{comment.permalink}',
-        'created': convert_to_datetime(comment.created_utc)
-    }
-
-    try:
-        document = comments_collection.insert_one(data)
-        inserted_id = document.inserted_id
-        inserted_document = comments_collection.find_one({'_id': inserted_id})
-
-        send_discord_webhook('comment', inserted_document)
-
-        app_logger.info(f'Comment {comment.id} saved to database')
-        app_logger.info(f'{pprint(inserted_document)}')
-
-    except Exception as e:
-        app_logger.error(f'Error saving comment: {e}')
-
 
 def stream_submissions():
     app_logger.info(
@@ -180,7 +67,7 @@ def stream_submissions():
 
                 # submission.reply('Beato')
 
-                save_submission_to_db(submission)
+                save_submission(submission)
 
 
 def stream_comments():
@@ -203,7 +90,7 @@ def stream_comments():
 
                 # comment.reply('Beato')
 
-                save_comment_to_db(comment)
+                save_comment(comment)
 
 
 def main():
