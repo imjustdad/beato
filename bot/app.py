@@ -1,4 +1,5 @@
-from multiprocessing import Process
+from threading import Thread
+from logger import setup_logger, setup_library_loggers
 import os
 import re
 import logging
@@ -8,6 +9,17 @@ import requests
 import praw
 import pymongo
 from rich.pretty import pprint
+from discord import send_discord_webhook
+
+# set log level from environment
+log_level = os.getenv("LOG_LEVEL", "INFO")
+
+# initialize app logger
+app_logger = setup_logger("app", log_level)
+
+# set up library loggers: praw, prawcore, and pymongo
+setup_library_loggers(log_level)
+
 
 # region Environment Variables
 REDDIT_CLIENT_ID = os.getenv('REDDIT_CLIENT_ID')
@@ -19,55 +31,7 @@ MONGO_URI = os.getenv('MONGO_URI')
 DISCORD_WEBHOOK_URL = os.getenv('DISCORD_WEBHOOK_URL')
 # endregion
 
-# region Logging
 
-# region app Logging
-app_logger = logging.getLogger('app')
-app_logger.setLevel(logging.DEBUG)
-
-format_handler = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-
-file_handler = logging.FileHandler('app.log')
-file_handler.setLevel(logging.DEBUG)
-file_handler.setFormatter(format_handler)
-
-stream_handler = logging.StreamHandler()
-stream_handler.setLevel(logging.INFO)
-stream_handler.setFormatter(format_handler)
-
-app_logger.addHandler(file_handler)
-app_logger.addHandler(stream_handler)
-# endregion
-
-# region PRAW Logging
-praw_file_handler = logging.FileHandler('praw.log')
-praw_file_handler.setLevel(logging.WARNING)  # DEBUG to enable these logs
-praw_file_handler.setFormatter(format_handler)
-
-for logger_name in ('praw', 'prawcore'):
-    logger = logging.getLogger(logger_name)
-    logger.setLevel(logging.DEBUG)
-    logger.addHandler(praw_file_handler)
-
-# endregion
-
-# region pymongo Logging (Partially Working)
-pymongo_logger = logging.getLogger('pymongo.command')
-pymongo_logger.setLevel(logging.DEBUG)
-
-pymongo_file_handler = logging.FileHandler('pymongo.log')
-pymongo_file_handler.setLevel(logging.DEBUG)
-pymongo_file_handler.setFormatter(format_handler)
-
-# === uncomment the below 3 comments to write command logs to the terminal
-# pymongo_stream_handler = logging.StreamHandler()
-# pymongo_stream_handler.setLevel(logging.DEBUG)
-
-pymongo_logger.addHandler(pymongo_file_handler)
-# pymongo_logger.addHandler(pymongo_stream_handler)
-# endregion
-
-# endregion Logging
 
 # region PRAW Configuration
 praw_config = {
@@ -100,66 +64,6 @@ def is_pattern_matched(text):
 
 def convert_to_datetime(utc_time):
     return datetime.datetime.fromtimestamp(utc_time).strftime('%Y-%m-%d %H:%M:%S')
-
-
-def send_discord_webhook(entity, document):
-
-    if entity == 'comment':
-        data = {
-            'content': 'a new document was inserted into mongo',
-            'embeds': [
-                {
-                    'title': 'new comment',
-                    'fields': [
-                        {
-                            'name': '_id',
-                            'value': f"{document['_id']}",
-                            'inline': False
-                        },
-                        {
-                            'name': 'body',
-                            'value': f"{document['body']}",
-                            'inline': False
-                        },
-                        {
-                            'name': 'permalink',
-                            'value': f"{document['permalink']}",
-                            'inline': False
-                        }
-                    ],
-                    'color': 3066993
-                }
-            ]
-        }
-
-    elif entity == 'submission':
-        data = {
-            'content': 'a new document was inserted into mongo',
-            'embeds': [
-                {
-                    'title': 'new submission',
-                    'fields': [
-                        {
-                            'name': '_id',
-                            'value': f"{document['_id']}",
-                            'inline': False
-                        },
-                        {
-                            'name': 'title',
-                            'value': f"{document['title']}",
-                            'inline': False
-                        }
-                    ],
-                    'color': 3066993
-                }
-            ]
-        }
-
-    response = requests.post(
-        DISCORD_WEBHOOK_URL, data=json.dumps(data), headers={'Content-Type': 'application/json'})
-
-    if response.status_code == 204:
-        app_logger.info('f"{entity}" document sent to discord')
 
 
 def is_submission_persisted(submission_id):
@@ -303,14 +207,14 @@ def stream_comments():
 
 
 def main():
-    p1 = Process(target=stream_submissions)
-    p2 = Process(target=stream_comments)
+    t1 = Thread(target=stream_comments, name="CommentWatcher", daemon=True)
+    t2 = Thread(target=stream_submissions, name="SubmissionWatcher", daemon=True)
 
-    p1.start()
-    p2.start()
+    t1.start()
+    t2.start()
 
-    p1.join()
-    p2.join()
+    t1.join()
+    t2.join()
 
 
 if __name__ == '__main__':
