@@ -6,11 +6,61 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Beato</title>
     <link rel="stylesheet" href="css/main.css">
+    <script type="text/javascript" src="https://unpkg.com/graphql-ws/umd/graphql-ws.min.js"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
 </head>
 
 <body>
     <h1 x-data="{ message: 'I ♥ alpinejs' }" x-text="message"></h1>
+
+    <div x-data="getComments()" x-on:destroy="destroy()" class="space-y-4">
+        <template x-for="comment in comments" :key="comment._id">
+            <div class="p-4 bg-white rounded shadow">
+                <p x-text="comment.body"></p>
+                <p class="text-sm text-gray-500" x-text="comment.created_at"></p>
+            </div>
+        </template>
+    </div>
+
+    <script>
+        const client = graphqlWs.createClient({
+            url: 'wss://large-wallaby-99.hasura.app/v1/graphql',
+            connectionParams: {
+                headers: {
+                    'x-hasura-role': 'ghpage'
+                }
+            }
+        });
+
+        function getComments() {
+            return {
+                comments: [],
+                unsubscribe: null,
+                init() {
+                    if (this.unsubscribe) {
+                        this.unsubscribe();
+                        this.unsubscribe = null;
+                    }
+                    this.unsubscribe = client.subscribe(
+                        { query: `subscription { beato_comments { _id author body submission permalink created_at }}` },
+                        {
+                            next: ({ data }) => this.comments = data.beato_comments,
+                            error: err => console.error('Subscription error:', err),
+                            complete: () => console.log('subscription complete'),
+                        }
+                    );
+                },
+                destroy() {
+                    if (this.unsubscribe) {
+                        this.unsubscribe();
+                        this.unsubscribe = null;
+                    }
+                }
+            }
+        }
+    </script>
+
 </body>
 
 </html>
