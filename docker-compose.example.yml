@@ -5,6 +5,7 @@ services:
     build:
       context: ./bot
       dockerfile: Dockerfile
+    container_name: beato-bot
     environment:
       LOG_LEVEL: ${LOG_LEVEL:-INFO} # Defaults to INFO if not provided
       DISCORD_WEBHOOK_URL: "https://discord.com/api/webhooks/your-webhook-url"
@@ -16,14 +17,17 @@ services:
     volumes:
       - ./logs:/app/logs  # Optional local logging
     depends_on:
-      - llm
+      - server
+    restart: unless-stopped
 
-  llm:
+  server:
     build:
       context: ./server
       dockerfile: Dockerfile
+    container_name: beato-server
     ports:
       - "8000:8000"
     environment:
       LLM_REPO_ID: "hugging-quants/Llama-3.2-1B-Instruct-Q4_K_M-GGUF"   # Default, can override
       LLM_FILENAME: "llama-3.2-1b-instruct-q4_k_m.gguf"                 # Default, can override
+    restart: unless-stopped
