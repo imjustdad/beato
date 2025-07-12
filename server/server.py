@@ -11,8 +11,8 @@ logger = logging.getLogger("server")
 
 app = FastAPI()
 
-# Lazy LLM Initialization
 llm = None
+llm_loaded_successfully = False
 
 REPO_ID = os.getenv("LLAMA_REPO_ID", "hugging-quants/Llama-3.2-1B-Instruct-Q4_K_M-GGUF")
 FILENAME = os.getenv("LLAMA_FILENAME", "llama-3.2-1b-instruct-q4_k_m.gguf")
@@ -28,32 +28,30 @@ class ChatResponse(BaseModel):
 # Load LLM on startup event
 @app.on_event("startup")
 def load_llm():
-    global llm
+    global llm, llm_loaded_successfully
     try:
         logger.info("Loading LLM model on startup...")
         llm = Llama.from_pretrained(
             repo_id=REPO_ID,
             filename=FILENAME
         )
+        llm_loaded_successfully = True
         logger.info("LLM model loaded.")
     except Exception as e:
+        llm_loaded_successfully = False
         logger.error(f"Failed to load LLM at startup: {e}")
 
 
 def analyze_response(message: str) -> List[str]:
-    global llm
+    global llm, llm_loaded_successfully
 
-    if llm is None:
-        try:
-            logger.info("Loading LLM model on-demand...")
-            llm = Llama.from_pretrained(
-                repo_id="hugging-quants/Llama-3.2-1B-Instruct-Q4_K_M-GGUF",
-                filename="llama-3.2-1b-instruct-q4_k_m.gguf"
-            )
-            logger.info("LLM model loaded on-demand.")
-        except Exception as e:
-            logger.error(f"Failed to load LLM: {e}")
-            raise HTTPException(status_code=500, detail="LLM failed to load.")
+    if not llm_loaded_successfully or llm is None:
+        logger.error("Attempted to analyze response, but LLM is not loaded or failed to load.")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="LLM model is not loaded. Please wait."
+        )
+            
 
     try:
         response = llm.create_chat_completion(
@@ -71,9 +69,6 @@ def analyze_response(message: str) -> List[str]:
 
         response_text = response['choices'][0]['message']['content'].strip()
 
-        print("LLM raw response:", repr(response_text))
-        print("User submitted message:", repr(message))
-
         if "no matches" in response_text.lower():
             return []
         
@@ -83,25 +78,45 @@ def analyze_response(message: str) -> List[str]:
 
     except Exception as e:
         logger.error(f"Error during LLM analysis: {e}")
-        raise HTTPException(status_code=500, detail="Failed to analyze message.")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to analyze message due to an internal LLM error."
+        )
 
 @app.post("/llama", response_model=ChatResponse)
 async def chat_completion(request: ChatRequest):
-    matches = analyze_response(request.message)
-
-    if matches:
-        return {
-            "status": "success",
-            "matches": matches,
-            "message": "Matches found and returned"
-        }
-    else:
-        return {
-            "status": "success",
-            "matches": [],
-            "message": "No matches detected"
-        }
+    try:
+        matches = analyze_response(request.message)
+        
+        if matches:
+            return ChatResponse(
+                status="success",
+                matches=matches,
+                message="Matches found and returned"
+            )
+        else:
+            return ChatResponse(
+                status="success",
+                matches=[],
+                message="No matches detected"
+            )
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        logger.error("fUnhandled error in llama endpoint")
 
 @app.get("/health")
 async def health_check():
-    return {"status": "ok"}
+    global llm_loaded_successfully
+    if llm_loaded_successfully:
+        return {
+            "status": "healthy",
+            "model_loaded": True,
+            "message": "LLM model is loaded and ready."
+        }
+    else:
+        logger.warning("Health check failed: LLM model is not yet loaded or failed to load.")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="LLM model is still loading or failed to load."
+        )
