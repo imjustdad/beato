@@ -1,6 +1,6 @@
 import os
 from datetime import datetime, timezone
-from pymongo import MongoClient
+import pymongo
 from pymongo.errors import PyMongoError
 from logger import setup_logger
 from discord import send_discord_webhook
@@ -11,9 +11,11 @@ MONGO_URI = os.getenv("MONGO_URI")
 if not MONGO_URI:
     raise RuntimeError("MONGO_URI is not set. Define it in your Docker Compose environment.")
 
-client = MongoClient(
+client = pymongo.MongoClient(
     MONGO_URI,
-    server_api=MongoClient.SERVER_API_VERSION_1
+    server_api=pymongo.server_api.ServerApi(
+        version='1', strict=True, deprecation_errors=True
+    )
 )
 database = client["main"]
 submissions_collection = database["submissions"]
