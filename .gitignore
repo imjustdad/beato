@@ -1,1 +1,67 @@
+# === Python ===
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# === Virtualenv ===
+venv/
+.env
+.env.*
+
+# === Logs ===
+*.log
+
+# === IDEs & Editors ===
+.vscode/
+.idea/
+*.swp
+*.swo
+*.bak
+
+# === Python Packaging ===
+build/
+dist/
+*.egg-info/
+
+# === Coverage & Test Artifacts ===
+.coverage
+.tox/
+htmlcov/
+.pytest_cache/
+
+# === Docker-related ===
 docker-compose.yml
+*.tar
+
+# === Git & Docker Build Caches ===
+.git/
+.gitignore
+
+# === Miscellaneous ===
+*.tmp
+*.bak
+*.orig
+*.old
+*.DS_Store
+
+# === LLM / Model Files ===
+*.gguf
+*.ckpt
+*.pt
+*.pth
+
+# === Node.js (if used in frontend components) ===
+node_modules/
+package-lock.json
+
+# === MongoDB dumps or data ===
+dump/
+*.bson
+*.json
+
+# === Include safe examples ===
+!.env.example
+!docker-compose.example.yml
+
