@@ -3,6 +3,7 @@ import praw
 import re
 import time
 from logger import setup_logger
+from llm import is_pattern_matched
 from mongo import is_submission_persisted, save_submission, is_comment_persisted, save_comment
 
 logger = setup_logger("reddit")
@@ -28,18 +29,6 @@ praw_config = {
 
 reddit = praw.Reddit(**praw_config)
 subreddit = reddit.subreddit(SUBREDDIT_NAME)
-
-# Chord pattern matching
-chord_progression_pattern = re.compile(
-    r'(\s|^)(I IV V|I V vi IV|ii V I|vi IV I V|I vi IV V|iii vi IV V|I IV vi V|I vi ii V|IV V I|I iii IV V|1 4 5|1 5 6 4|2 5 1|6 4 1 5|1 6 4 5|3 6 4 5|1 4 6 5|1 6 2 5|4 5 1|1 3 4 5)(\?+|!+|\.+|\,+)?(\s|$)'
-)
-chord_names_pattern = re.compile(
-    r'(\s|^)(C|C#|D|D#|E|F|F#|G|G#|A|A#|B|Cb|Db|Eb|Fb|Gb|Ab|Bb)(m|7|m7|dim|aug|sus[24]|6|9|11|13|#9|b5|b9|#5|maj|maj7|maj9|7b5|m7b5)?(\?+|!+|\.+|\,+)?(\s|$)'
-)
-
-def is_pattern_matched(text: str):
-    return chord_names_pattern.search(text) or chord_progression_pattern.search(text)
-
 
 def stream_submissions():
     logger.info(f"Started watching new submissions on r/{SUBREDDIT_NAME}...")
