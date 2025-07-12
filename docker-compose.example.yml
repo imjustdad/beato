@@ -13,6 +13,7 @@ services:
       REDDIT_CLIENT_ID: "your_reddit_client_id"
       REDDIT_CLIENT_SECRET: "your_reddit_client_secret"
       REDDIT_USER_AGENT: "your_app_user_agent"
+      FASTAPI_URL: "your fastapi_url"
       SUBREDDIT_NAME: "patfinnerty"
     volumes:
       - ./logs:/app/logs  # Optional local logging
