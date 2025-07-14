@@ -4,24 +4,38 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Beato</title>
+    <title>BeatoBot GH Page</title>
     <link rel="stylesheet" href="css/main.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
     <script type="text/javascript" src="https://unpkg.com/graphql-ws/umd/graphql-ws.min.js"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 
 </head>
 
 <body>
-    <h1 x-data="{ message: 'I ♥ alpinejs' }" x-text="message"></h1>
+    <main class="container">
 
-    <div x-data="getComments()" x-on:destroy="destroy()" class="space-y-4">
-        <template x-for="comment in comments" :key="comment._id">
-            <div class="p-4 bg-white rounded shadow">
-                <p x-text="comment.body"></p>
-                <p class="text-sm text-gray-500" x-text="comment.created_at"></p>
-            </div>
-        </template>
-    </div>
+        <h1>BeatoBot</h1>
+
+        <div x-data="getComments()" x-on:destroy="destroy()">
+            <template x-for="comment in comments" :key="comment._id">
+
+                <article>
+
+                    <body>
+                        <blockquote>
+                            <span x-text="comment.body"></span>
+                            <footer>
+                                <cite>- <span x-text="comment.author.name"></span></cite>
+                            </footer>
+                        </blockquote>
+                    </body>
+                </article>
+
+            </template>
+        </div>
+    </main>
+
 
     <script>
         const client = graphqlWs.createClient({
@@ -43,7 +57,7 @@
                         this.unsubscribe = null;
                     }
                     this.unsubscribe = client.subscribe(
-                        { query: `subscription { beato_comments { _id author body submission permalink created_at }}` },
+                        { query: `subscription { beato_comments(limit: 5) { _id author body submission permalink created_at }}` },
                         {
                             next: ({ data }) => this.comments = data.beato_comments,
                             error: err => console.error('Subscription error:', err),
