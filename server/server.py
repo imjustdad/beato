@@ -2,7 +2,7 @@ import os
 import logging
 import json
 from typing import List, Union
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, status
 from pydantic import BaseModel
 from llama_cpp import Llama
 
@@ -21,9 +21,9 @@ class ChatRequest(BaseModel):
     message: str
 
 class ChatResponse(BaseModel):
-    status: str
-    matches: Union[List[str], None]
-    message: str
+    is_beato_meme: bool
+    confidence: float
+    reasoning: str
 
 # Load LLM on startup event
 @app.on_event("startup")
@@ -33,7 +33,8 @@ def load_llm():
         logger.info("Loading LLM model on startup...")
         llm = Llama.from_pretrained(
             repo_id=REPO_ID,
-            filename=FILENAME
+            filename=FILENAME,
+            verbose=False
         )
         llm_loaded_successfully = True
         logger.info("LLM model loaded.")
@@ -42,7 +43,7 @@ def load_llm():
         logger.error(f"Failed to load LLM at startup: {e}")
 
 
-def analyze_response(message: str) -> List[str]:
+def analyze_response(message: str) -> ChatResponse:
     global llm, llm_loaded_successfully
 
     if not llm_loaded_successfully or llm is None:
@@ -51,30 +52,44 @@ def analyze_response(message: str) -> List[str]:
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="LLM model is not loaded. Please wait."
         )
-            
+    
+    system_content="""
+    You are an expert in internet meme culture and Reddit discourse. Your task is to analyze a Reddit comment and determine whether it is a reference to or joke about the ongoing meme feud between Pat Finnerty and Rick Beato.
+    This meme often includes jokes or sarcastic comparisons between Pat Finnerty's irreverent, DIY musical humor and Rick Beato's technical, academic YouTube approach to music theory and production. It may reference:
+    - Phrases like “What makes this good?”, “he’s not a theory guy,” “Rick would hate this,” etc.
+    - Satirical or exaggerated praise/criticism of either person
+    - Comments on music taste, tone, production quality, or theory from a comedic angle
+    Given the Reddit comment below, decide if it fits this meme format.
+    """
 
     try:
         response = llm.create_chat_completion(
             messages=[
-                {
-                    "role": "system",
-                    "content": "Please analyze the following message for musical chords or progressions. Progressions may also be listed as numbers rather than roman numerals. If you find any chords or progressions, just list them, separated by commas. If no chords or progressions are found, say 'no matches.' Do not provide any additional explanation."
-                },
-                {
-                    "role": "user",
-                    "content": message
+                { "role": "system", "content": system_content },
+                { "role": "user", "content": message }
+            ],
+            response_format={
+                "type": "json_object",
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "is_beato_meme": { "type": "boolean" },
+                        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+                        "reasoning": { "type": "string" }
+                    },
+                    "required": ["is_beato_meme", "confidence", "reasoning"],
                 }
-            ]
+            }
         )
 
-        response_text = response['choices'][0]['message']['content'].strip()
+        response_text = response['choices'][0]['message']['content']
+        response_json = json.loads(response_text)
 
-        if "no matches" in response_text.lower():
-            return []
-        
-        matches = [m.strip() for m in response_text.split(',') if m.strip()]
-        return matches
-
+        return ChatResponse(
+            is_beato_meme = response_json['is_beato_meme'],
+            confidence = response_json['confidence'],
+            reasoning = response_json['reasoning']
+        )
 
     except Exception as e:
         logger.error(f"Error during LLM analysis: {e}")
@@ -86,24 +101,13 @@ def analyze_response(message: str) -> List[str]:
 @app.post("/llama", response_model=ChatResponse)
 async def chat_completion(request: ChatRequest):
     try:
-        matches = analyze_response(request.message)
+        return analyze_response(request.message)
         
-        if matches:
-            return ChatResponse(
-                status="success",
-                matches=matches,
-                message="Matches found and returned"
-            )
-        else:
-            return ChatResponse(
-                status="success",
-                matches=[],
-                message="No matches detected"
-            )
     except HTTPException as e:
         raise e
+
     except Exception as e:
-        logger.error("fUnhandled error in llama endpoint")
+        logger.error(f"Unhandled error in llama endpoint")
 
 @app.get("/health")
 async def health_check():
