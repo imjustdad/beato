@@ -1,0 +1,3 @@
+- [] replace mongo.py to use hasrua graphql mutations
+    - [] update docker-compose.yml with env vars to support this
+- [] finish building out the ghpage
