@@ -6,7 +6,7 @@ logger = setup_logger("llm-bot")
 
 FASTAPI_URL = os.getenv("FASTAPI_URL", "http://server:8000/llama")
 
-def is_pattern_matched(message: str):
+def query_llm(message: str):
     try:
         response = requests.post(FASTAPI_URL, json={"message": message})
 
